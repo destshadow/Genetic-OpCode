@@ -1,6 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -22,9 +24,7 @@ inline InstructionDNA* crossover(InstructionDNA* parent1, InstructionDNA* parent
     size_t crossoverPoint1 = distribution1(gen);
     size_t crossoverPoint2 = distribution2(gen);
 
-    InstructionDNA* child = new InstructionDNA(0);
-    std::vector<uint8_t>& childGenes = child->getGenes();
-
+    std::vector<uint8_t> childGenes;
     childGenes.insert(childGenes.end(), genes1.begin(), genes1.begin() + crossoverPoint1);
     childGenes.insert(childGenes.end(), genes2.begin() + crossoverPoint2, genes2.end());
 
@@ -32,13 +32,22 @@ inline InstructionDNA* crossover(InstructionDNA* parent1, InstructionDNA* parent
         childGenes.resize(MAX_INSTRUCTION_LENGTH);
     }
 
-    return child;
+    return new InstructionDNA(std::move(childGenes));
 }
 
+// Roulette wheel: requires a non-empty population with finite, non-negative fitness
 inline size_t selectParent(const std::vector<InstructionDNA*>& population){
+    assert(!population.empty());
+
     float totalFitness = 0.0f;
     for(const auto& individual : population){
+        assert(std::isfinite(individual->getFitness()) && individual->getFitness() >= 0.0f);
         totalFitness += individual->getFitness();
+    }
+
+    if(totalFitness == 0.0f){
+        std::uniform_int_distribution<size_t> distribution(0, population.size() - 1);
+        return distribution(gen);
     }
 
     std::uniform_real_distribution<float> distribution(0.0f, totalFitness);
@@ -55,7 +64,10 @@ inline size_t selectParent(const std::vector<InstructionDNA*>& population){
     return population.size() - 1; // Fallback in case of rounding errors
 }
 
+// Requires at least two individuals, so that the parents can differ
 inline std::pair<InstructionDNA*, InstructionDNA*> selectParents(const std::vector<InstructionDNA*>& population){
+    assert(population.size() >= 2);
+
     size_t parent1Index = selectParent(population);
     size_t parent2Index = selectParent(population);
 
@@ -96,7 +108,7 @@ inline void mutateLength(InstructionDNA* individual){
     size_t oldLength = individual->getGenes().size();
     size_t newLength = lengthDistribution(gen);
 
-    individual->getGenes().resize(newLength);
+    individual->resizeGenes(newLength);
     for(size_t i = oldLength; i < newLength; ++i){
         individual->setGenes(i, static_cast<uint8_t>(geneDistribution(gen)));
     }

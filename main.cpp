@@ -9,7 +9,7 @@
 std::random_device rd;
 std::mt19937 gen(rd());
 
-const int POP_SIZE = 150;
+const int POP_SIZE = 300;
 const float MUTATION_RATE = 0.05f;
 const int MAX_GENERATIONS = 5;
 
@@ -37,7 +37,7 @@ int main() {
             auto [child1, child2] = crossoverParentsWithMutation(
                 parent1, parent2, MUTATION_RATE);
             nextPopulation.push_back(child1);
-            
+
             if (nextPopulation.size() < POP_SIZE) {
                 nextPopulation.push_back(child2);
             } else {

@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <random>
 
+// Maximum length of an x86 instruction
+constexpr size_t MAX_INSTRUCTION_LENGTH = 15;
+
 class InstructionDNA{
 
     std::vector<uint8_t> genes;
@@ -12,7 +15,7 @@ class InstructionDNA{
 public:
     InstructionDNA( std::mt19937& dis, bool randomize = true){
         if(randomize){
-            std::uniform_int_distribution<int> distribution(1, 15);
+            std::uniform_int_distribution<int> distribution(1, MAX_INSTRUCTION_LENGTH);
             size_t len = distribution(dis);
             genes.resize(len);
 

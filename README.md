@@ -18,7 +18,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic main.cpp -o genetic_opcode
 ./genetic_opcode
 ```
 
-Ogni esecuzione crea 150 sequenze di 1–15 byte e mostra il migliore di 5 generazioni. Per esempio:
+Ogni esecuzione crea 300 sequenze di 1–15 byte e mostra il migliore di 5 generazioni. Per esempio:
 
 ```text
 Generazione 0, migliore: 8d b8 fc b6 c9 ... (fitness 2207)
@@ -60,4 +60,4 @@ Questi passaggi sono proposte: **non sono ancora implementati**. Il prossimo int
 
 ## Stato e limiti
 
-Il ciclo attuale è pensato per essere leggibile e verificabile, non per produrre risultati di ricerca. Alcuni operatori usano ancora puntatori grezzi e la funzione che muta anche la lunghezza richiede una revisione prima di essere usata. Nessun byte generato viene eseguito sulla CPU.
+Il ciclo attuale è pensato per essere leggibile e verificabile, non per produrre risultati di ricerca. Il crossover taglia i due genitori in punti indipendenti, quindi un figlio può essere più lungo o più corto di entrambi (sempre fra 1 e 15 byte). Alcuni operatori usano ancora puntatori grezzi e la mutazione della lunghezza (`mutateLength`) esiste ma non è usata nel ciclo. Nessun byte generato viene eseguito sulla CPU.

@@ -1,33 +1,41 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <random>
 #include <utility>
+#include <vector>
 #include "chromosome.hpp"
 
 extern std::mt19937 gen;
 
-InstructionDNA* crossover(InstructionDNA* parent1, InstructionDNA* parent2){
-    size_t len1 = parent1->getGenes().size();
-    size_t len2 = parent2->getGenes().size();
-    size_t minLen = std::min(len1, len2);
+// Cut-and-splice crossover: head of parent1 + tail of parent2, with independent cut points,
+// so the child can be longer or shorter than both parents (between 1 and MAX_INSTRUCTION_LENGTH)
+inline InstructionDNA* crossover(InstructionDNA* parent1, InstructionDNA* parent2){
+    const std::vector<uint8_t>& genes1 = parent1->getGenes();
+    const std::vector<uint8_t>& genes2 = parent2->getGenes();
 
-    std::uniform_int_distribution<size_t> distribution(0, minLen);
-    size_t crossoverPoint = distribution(gen);
+    std::uniform_int_distribution<size_t> distribution1(1, genes1.size());
+    std::uniform_int_distribution<size_t> distribution2(0, genes2.size());
+    size_t crossoverPoint1 = distribution1(gen);
+    size_t crossoverPoint2 = distribution2(gen);
 
-    InstructionDNA* child = new InstructionDNA(minLen);
+    InstructionDNA* child = new InstructionDNA(0);
+    std::vector<uint8_t>& childGenes = child->getGenes();
 
-    for(size_t i = 0; i < crossoverPoint; ++i){
-        child->setGenes(i, parent1->getGenes()[i]);
-    }
+    childGenes.insert(childGenes.end(), genes1.begin(), genes1.begin() + crossoverPoint1);
+    childGenes.insert(childGenes.end(), genes2.begin() + crossoverPoint2, genes2.end());
 
-    for(size_t i = crossoverPoint; i < minLen; ++i){
-        child->setGenes(i, parent2->getGenes()[i]);
+    if(childGenes.size() > MAX_INSTRUCTION_LENGTH){
+        childGenes.resize(MAX_INSTRUCTION_LENGTH);
     }
 
     return child;
 }
 
-int selectParent(const std::vector<InstructionDNA*>& population){
+inline size_t selectParent(const std::vector<InstructionDNA*>& population){
     float totalFitness = 0.0f;
     for(const auto& individual : population){
         totalFitness += individual->getFitness();
@@ -47,9 +55,9 @@ int selectParent(const std::vector<InstructionDNA*>& population){
     return population.size() - 1; // Fallback in case of rounding errors
 }
 
-std::pair<InstructionDNA*, InstructionDNA*> selectParents(const std::vector<InstructionDNA*>& population){
-    int parent1Index = selectParent(population);
-    int parent2Index = selectParent(population);
+inline std::pair<InstructionDNA*, InstructionDNA*> selectParents(const std::vector<InstructionDNA*>& population){
+    size_t parent1Index = selectParent(population);
+    size_t parent2Index = selectParent(population);
 
     // Ensure that the two parents are not the same individual
     for(int attempt = 0; parent2Index == parent1Index && attempt < 20; ++attempt){
@@ -62,80 +70,57 @@ std::pair<InstructionDNA*, InstructionDNA*> selectParents(const std::vector<Inst
     return {population[parent1Index], population[parent2Index]};
 }
 
-std::pair<InstructionDNA*, InstructionDNA*> crossoverParents(InstructionDNA* parent1, InstructionDNA* parent2){
+inline std::pair<InstructionDNA*, InstructionDNA*> crossoverParents(InstructionDNA* parent1, InstructionDNA* parent2){
     InstructionDNA* child1 = crossover(parent1, parent2);
     InstructionDNA* child2 = crossover(parent2, parent1);
     return {child1, child2};
 }
 
-std::pair<InstructionDNA*, InstructionDNA*> crossoverParentsWithMutation(InstructionDNA* parent1, InstructionDNA* parent2, float mutationRate){
+inline void mutate(InstructionDNA* individual, float mutationRate){
+    std::uniform_real_distribution<float> mutationDistribution(0.0f, 1.0f);
+    // uniform_int_distribution does not allow 8-bit types: draw an int and cast it
+    std::uniform_int_distribution<int> geneDistribution(0, 255);
+
+    for(size_t i = 0; i < individual->getGenes().size(); ++i){
+        if(mutationDistribution(gen) < mutationRate){
+            individual->setGenes(i, static_cast<uint8_t>(geneDistribution(gen)));
+        }
+    }
+}
+
+// Changes the length to a random value in [1, MAX_INSTRUCTION_LENGTH]; new bytes are random
+inline void mutateLength(InstructionDNA* individual){
+    std::uniform_int_distribution<size_t> lengthDistribution(1, MAX_INSTRUCTION_LENGTH);
+    std::uniform_int_distribution<int> geneDistribution(0, 255);
+
+    size_t oldLength = individual->getGenes().size();
+    size_t newLength = lengthDistribution(gen);
+
+    individual->getGenes().resize(newLength);
+    for(size_t i = oldLength; i < newLength; ++i){
+        individual->setGenes(i, static_cast<uint8_t>(geneDistribution(gen)));
+    }
+}
+
+inline std::pair<InstructionDNA*, InstructionDNA*> crossoverParentsWithMutation(InstructionDNA* parent1, InstructionDNA* parent2, float mutationRate){
     auto [child1, child2] = crossoverParents(parent1, parent2);
 
-    std::uniform_real_distribution<float> mutationDistribution(0.0f, 1.0f);
-    std::uniform_int_distribution<uint8_t> geneDistribution(0, 255);
-
-    for(size_t i = 0; i < child1->getGenes().size(); ++i){
-        if(mutationDistribution(gen) < mutationRate){
-            child1->setGenes(i, geneDistribution(gen));
-        }
-    }
-
-    for(size_t i = 0; i < child2->getGenes().size(); ++i){
-        if(mutationDistribution(gen) < mutationRate){
-            child2->setGenes(i, geneDistribution(gen));
-        }
-    }
+    mutate(child1, mutationRate);
+    mutate(child2, mutationRate);
 
     return {child1, child2};
 }
 
-std::pair<InstructionDNA*, InstructionDNA*> crossoverParentsWithMutationAndLength(InstructionDNA* parent1, InstructionDNA* parent2, float mutationRate){
-    auto [child1, child2] = crossoverParents(parent1, parent2);
+inline std::pair<InstructionDNA*, InstructionDNA*> crossoverParentsWithMutationAndLength(InstructionDNA* parent1, InstructionDNA* parent2, float mutationRate){
+    auto [child1, child2] = crossoverParentsWithMutation(parent1, parent2, mutationRate);
 
-    std::uniform_real_distribution<float> mutationDistribution(0.0f, 1.0f);
-    std::uniform_int_distribution<uint8_t> geneDistribution(0, 255);
-    std::uniform_int_distribution<size_t> lengthDistribution(1, 15); // Assuming max length is 15
-
-    // Mutate child1
-    for(size_t i = 0; i < child1->getGenes().size(); ++i){
-        if(mutationDistribution(gen) < mutationRate){
-            child1->setGenes(i, geneDistribution(gen));
-        }
-    }
-
-    // Mutate child2
-    for(size_t i = 0; i < child2->getGenes().size(); ++i){
-        if(mutationDistribution(gen) < mutationRate){
-            child2->setGenes(i, geneDistribution(gen));
-        }
-    }
-
-    // Randomly change the length of the children
-    size_t newLength1 = lengthDistribution(gen);
-    size_t newLength2 = lengthDistribution(gen);
-
-    if(newLength1 != child1->getGenes().size()){
-        child1->getGenes().resize(newLength1);
-        for(size_t i = 0; i < newLength1; ++i){
-            if(i >= child1->getGenes().size()){
-                child1->setGenes(i, geneDistribution(gen));
-            }
-        }
-    }
-
-    if(newLength2 != child2->getGenes().size()){
-        child2->getGenes().resize(newLength2);
-        for(size_t i = 0; i < newLength2; ++i){
-            if(i >= child2->getGenes().size()){
-                child2->setGenes(i, geneDistribution(gen));
-            }
-        }
-    }
+    mutateLength(child1);
+    mutateLength(child2);
 
     return {child1, child2};
 }
 
-std::pair<InstructionDNA*, InstructionDNA*> elitism(const std::vector<InstructionDNA*>& population){
+inline std::pair<InstructionDNA*, InstructionDNA*> elitism(const std::vector<InstructionDNA*>& population){
     if(population.size() < 2){
         return {nullptr, nullptr}; // Not enough individuals for elitism
     }
@@ -160,18 +145,7 @@ std::pair<InstructionDNA*, InstructionDNA*> elitism(const std::vector<Instructio
     return {population[bestIndex], population[secondBestIndex]};
 }
 
-void mutate(InstructionDNA* individual, float mutationRate){
-    std::uniform_real_distribution<float> mutationDistribution(0.0f, 1.0f);
-    std::uniform_int_distribution<uint8_t> geneDistribution(0, 255);
-
-    for(size_t i = 0; i < individual->getGenes().size(); ++i){
-        if(mutationDistribution(gen) < mutationRate){
-            individual->setGenes(i, geneDistribution(gen));
-        }
-    }
-}
-
-void printIndividual(const InstructionDNA& individual) {
+inline void printIndividual(const InstructionDNA& individual) {
     for (uint8_t byte : individual.getGenes()) {
         std::cout << std::hex << std::setw(2) << std::setfill('0')
                   << static_cast<int>(byte) << ' ';
